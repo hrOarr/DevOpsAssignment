@@ -41,8 +41,8 @@ jobs:
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/authorized_keys
+          chmod 600 ~/.ssh/authorized_keys
           for host in $(echo "${{ secrets.APP_HOSTS }}" | tr ',' ' '); do
             ssh-keyscan -H $host >> ~/.ssh/known_hosts
           done
