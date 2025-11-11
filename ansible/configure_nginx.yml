@@ -1,0 +1,48 @@
+---
+- name: Configure Nginx reverse proxy on proxy server
+  hosts: proxy_server
+  become: true
+  vars:
+    nginx_local_conf: ./nginx.conf   # relative to where you run ansible
+    nginx_remote_dir: /opt/nginx
+    nginx_remote_conf: /opt/nginx/nginx.conf
+    nginx_container_name: reverse-proxy
+  tasks:
+    - name: Ensure nginx remote dir exists
+      file:
+        path: "{{ nginx_remote_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Copy nginx.conf to proxy
+      copy:
+        src: "{{ nginx_local_conf }}"
+        dest: "{{ nginx_remote_conf }}"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Pull nginx image
+      community.docker.docker_image:
+        name: nginx
+        source: pull
+        tag: stable
+
+    - name: Remove old nginx container if exists
+      community.docker.docker_container:
+        name: "{{ nginx_container_name }}"
+        state: absent
+      ignore_errors: yes
+
+    - name: Run nginx container with mounted config
+      community.docker.docker_container:
+        name: "{{ nginx_container_name }}"
+        image: nginx:stable
+        state: started
+        restart_policy: always
+        ports:
+          - "80:80"
+        mounts:
+          - source: "{{ nginx_remote_conf }}"
+            target: /etc/nginx/nginx.conf
+            type: bind

@@ -1,0 +1,39 @@
+---
+- name: Deploy app containers on application servers
+  hosts: app_servers
+  become: true
+  vars:
+    image_name: astrodust/simple-web-app
+    image_tag: latest
+    container_name: simple-web-app
+    app_port: 5000
+    docker_host: unix:///var/run/docker.sock
+  tasks:
+    - name: Install Python Docker SDK
+      become: true
+      apt:
+        name: python3-docker
+        state: present
+    - name: Pull app image
+      community.docker.docker_image:
+        name: "{{ image_name }}"
+        tag: "{{ image_tag }}"
+        source: pull
+
+    - name: Stop and remove existing container if present
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        state: absent
+      ignore_errors: yes
+
+    - name: Run app container (pull image if missing)
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        image: "{{ image_name }}:{{ image_tag }}"
+        state: started
+        restart_policy: always
+        published_ports:
+          - "{{ app_port }}:5000"
+        env:
+          APP_COMMIT: "{{ image_tag }}"
+        docker_host: "{{ docker_host }}"
