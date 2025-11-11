@@ -3,7 +3,7 @@ name: CI/CD - Build & Deploy
 on:
   push:
     branches:
-      - main
+      - master
 
 env:
   IMAGE_NAME: astrodust/simple-web-app

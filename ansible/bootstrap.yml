@@ -1,29 +1,24 @@
 ---
-- name: Install Docker from Ubuntu repo
+- name: Bootstrap all machines with Docker
   hosts: all
   become: true
   tasks:
-    - name: Remove broken Docker and cappelikan sources
-      file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /etc/apt/sources.list.d/docker.list
-        - /etc/apt/sources.list.d/docker-ce.list
-        - /etc/apt/sources.list.d/docker.list.save
-        - /etc/apt/sources.list.d/docker-ce.list.save
-        - /etc/apt/sources.list.d/cappelikan-ppa.list
-
     - name: Update apt cache
       apt:
         update_cache: yes
+        cache_valid_time: 3600
 
-    - name: Install docker.io package
+    - name: Install Docker from Ubuntu repo
+      become: true
       apt:
-        name: docker.io
+        name:
+          - docker.io
+          - docker-compose
+          - python3-docker
         state: present
+        update_cache: yes
 
-    - name: Enable and start Docker
+    - name: Ensure Docker service is started and enabled
       service:
         name: docker
         state: started
