@@ -35,12 +35,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Ansible (interactive style, works in CI)
+      - name: Install Ansible
         run: |
-          sudo apt-get update -y
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y software-properties-common
-          sudo script -q -c "add-apt-repository --yes --update ppa:ansible/ansible"
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ansible
+          sudo apt install software-properties-common -y && sudo add-apt-repository --yes --update ppa:ansible/ansible && sudo apt install -y ansible
 
       - name: Configure SSH
         run: |
