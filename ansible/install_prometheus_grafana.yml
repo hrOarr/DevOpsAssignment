@@ -1,0 +1,147 @@
+---
+- name: Install Prometheus and Grafana on Proxy
+  hosts: proxy_server
+  become: true
+  vars:
+    prometheus_targets:
+      - "192.168.123.11:9100"
+      - "192.168.123.12:9100"
+      - "192.168.123.13:9100"
+      - "192.168.123.14:9100"
+
+  tasks:
+    # ---------------- CLEANUP ----------------
+    - name: Wait for any apt locks to clear
+      shell: |
+        while fuser /var/lib/dpkg/lock >/dev/null 2>&1; do sleep 2; done
+        while fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do sleep 2; done
+        while fuser /var/cache/apt/archives/lock >/dev/null 2>&1; do sleep 2; done
+
+    - name: Clean up broken repository entries
+      shell: |
+        rm -f /etc/apt/sources.list.d/grafana.list
+        apt-get clean
+      ignore_errors: yes
+
+    # ---------------- DEPENDENCIES ----------------
+    - name: Update apt cache (first refresh)
+      apt:
+        update_cache: yes
+
+    - name: Install essential dependencies (retry safe)
+      apt:
+        name:
+          - curl
+          - tar
+          - wget
+          - ca-certificates
+          - apt-transport-https
+          - software-properties-common
+          - gnupg
+          - lsb-release
+        state: present
+        update_cache: yes
+      register: install_result
+      retries: 5
+      delay: 10
+      until: install_result is success
+
+    # ---------------- PROMETHEUS ----------------
+    - name: Download Prometheus
+      get_url:
+        url: https://github.com/prometheus/prometheus/releases/download/v2.54.1/prometheus-2.54.1.linux-amd64.tar.gz
+        dest: /tmp/prometheus.tar.gz
+
+    - name: Extract Prometheus
+      unarchive:
+        src: /tmp/prometheus.tar.gz
+        dest: /opt/
+        remote_src: yes
+
+    - name: Move Prometheus binary
+      command: mv /opt/prometheus-2.54.1.linux-amd64 /etc/prometheus
+      args:
+        creates: /etc/prometheus
+
+    - name: Create Prometheus config
+      copy:
+        dest: /etc/prometheus/prometheus.yml
+        content: |
+          global:
+            scrape_interval: 10s
+
+          scrape_configs:
+            - job_name: 'node_exporters'
+              static_configs:
+                - targets:
+                  {% for target in prometheus_targets %}
+                  - '{{ target }}'
+                  {% endfor %}
+
+    - name: Create Prometheus systemd service
+      copy:
+        dest: /etc/systemd/system/prometheus.service
+        content: |
+          [Unit]
+          Description=Prometheus
+          After=network.target
+
+          [Service]
+          ExecStart=/etc/prometheus/prometheus --config.file=/etc/prometheus/prometheus.yml
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Enable and start Prometheus
+      systemd:
+        name: prometheus
+        state: started
+        enabled: true
+
+        # ---------------- GRAFANA INSTALL (RESILIENT) ----------------
+    - name: Ensure dependencies for wget and dpkg are present
+      ansible.builtin.apt:
+        name:
+          - wget
+          - apt-transport-https
+          - software-properties-common
+          - adduser
+          - libfontconfig1
+        state: present
+        update_cache: yes
+
+    - name: Try to download Grafana .deb
+      ansible.builtin.get_url:
+        url: https://dl.grafana.com/oss/release/grafana_11.2.0_amd64.deb
+        dest: /tmp/grafana.deb
+        mode: '0644'
+      register: grafana_download
+      ignore_errors: yes
+
+    - name: Fallback to wget if get_url fails
+      ansible.builtin.shell: |
+        wget -O /tmp/grafana.deb https://dl.grafana.com/oss/release/grafana_11.2.0_amd64.deb
+      when: grafana_download is failed
+
+    - name: Check if Grafana package exists
+      ansible.builtin.stat:
+        path: /tmp/grafana.deb
+      register: grafana_pkg
+
+    - name: Fail if Grafana package not found
+      ansible.builtin.fail:
+        msg: "Grafana package could not be downloaded! Check internet access or proxy settings."
+      when: not grafana_pkg.stat.exists
+
+    - name: Install Grafana from .deb
+      ansible.builtin.apt:
+        deb: /tmp/grafana.deb
+        state: present
+
+    - name: Enable and start Grafana service
+      ansible.builtin.systemd:
+        name: grafana-server
+        enabled: true
+        state: started
+
