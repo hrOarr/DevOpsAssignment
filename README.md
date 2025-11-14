@@ -49,7 +49,7 @@ ansible-playbook -i ansible/inventory.ini ansible/install_prometheus_grafana.yml
 - Prometheus: http://192.168.123.14:9090
 - Grafana: http://192.168.123.14:3000 (default login: admin/admin)
 
-### What This Setup Monitors
+## What This Setup Monitors
 - CPU usage across all servers
 - Memory utilization
 - Disk usage and I/O
